@@ -1,6 +1,7 @@
 
 #' @importFrom jmvcore decomposeTerms
 #' @importFrom rlang abort
+#' @export
 monolm <- function(data, formula, nsample=1000, nstep=Inf) {
 
   if ( ! inherits(data, 'data.frame'))
@@ -154,3 +155,14 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
   return(vartable)
 
 }
+
+bootstrap <- function (data=NULL, group=NULL) {
+  yb <- data
+  g = unique(group)
+  for (igroup in 1:length(g)){
+    j <- group==g[igroup]
+    yb[j]=sample(data[j],length(data[j]),replace=T)
+  }
+  return(yb)
+}
+
