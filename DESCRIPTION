@@ -15,7 +15,8 @@ Depends:
     nloptr,
     MASS,
     quadprog,
-    rlang
+    rlang,
+    jmvcore
 Suggests:
     testthat (>= 1.0.2)
 RoxygenNote: 6.1.1
