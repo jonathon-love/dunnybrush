@@ -42,11 +42,6 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
 
   me.rhs <- paste(components, collapse='+')
   me.formula <- as.formula(paste0('~', me.rhs))
-  group.counts <- as.data.frame(xtabs(me.formula, data))$Freq
-  n.subs.per.group <- unique(group.counts)
-
-  if (length(n.subs.per.group) > 1)
-    abort('Only balanced designs are supported at this time', class='DataError')
 
   group <- vapply(1:nrow(data), function(i) paste0(data[i,components], collapse=' '), '')
 
@@ -57,6 +52,8 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
 
   g <- character()
 
+  # construct g from the design matrix, so it can be used to
+  # reorder things
   for (rowNo in 1:nrow(design)) {
     colNo <- 2
     allValues <- integer()
@@ -71,10 +68,15 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
     g <- c(g, paste(allValues, collapse=' '))
   }
 
-  nsub <- n.subs.per.group
   mse <- mean(tapply(dep, group, var))
-  y <- tapply(dep, group, mean)[g]
-  w <- diag(rep(nsub/mse,length(y)))
+
+  y <- tapply(dep, group, mean)
+  y <- y[g]  # reorder to match design matrix
+
+  counts <- xtabs(~., data.frame(group))
+  counts <- counts[g]  # reorder to match design matrix
+
+  w <- diag(counts/mse)
 
   intercept.model <- design[,1]
 
@@ -111,9 +113,11 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
   # calculate p-values for additive and interaction effects by double bootstrap
   add.emp.F <- c(); AB.emp.F <- c()
   for (isample in 1:nsample) {
-    Y.boot <- bootstrap(dep, group) # first bootstrap of observed data
+    Y.boot <- bootstrap(dep, group, g) # first bootstrap of observed data
     # find p-value for additive effect
-    y <- tapply(Y.boot, group, mean);  w <- diag(rep(nsub/mse,length(y)))
+    y <- tapply(Y.boot, group, mean)
+    y <- y[g]
+
     m.int <- mLR(data=y, weights=w, design=intercept.model, nstep=nstep) # fit intercept model
     # shift data to consistent with intercept model
     Y.int <- Y.boot
@@ -121,9 +125,13 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
       j <- group==g[i]
       Y.int[j] <- Y.boot[j] - y[i] + m.int$pred[i]
     }
-    Y.int.boot <- bootstrap(Y.int, group) # second bootstrap of predicted data under intercept model
-    mse.int <- mean(tapply(Y.int.boot, group, var)); y.int <- tapply(Y.int.boot, group, mean)
-    w.int <- diag(rep(nsub/mse.int,length(y.int)))
+
+    Y.int.boot <- bootstrap(Y.int, group, g) # second bootstrap of predicted data under intercept model
+    mse.int <- mean(tapply(Y.int.boot, group, var));
+    y.int <- tapply(Y.int.boot, group, mean)
+    y.int <- y.int[g]
+
+    w.int <- w
     m.int.boot <- mLR(data=y.int, weights=w.int, design=intercept.model, nstep=nstep) # fit intercept model
     m.add.boot <- mLR(data=y.int, weights=w.int, design=add.model, nstep=nstep) # fit additive model
     add.emp.F <- append(add.emp.F,(m.int.boot$fit-m.add.boot$fit)/add.df) # store additive empirical F under intercept model
@@ -135,9 +143,13 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
       j <- group==g[i]
       Y.add[j] <- Y.boot[j] - y[i] + m.add$pred[i]
     }
-    Y.add.boot <- bootstrap(Y.add, group) # second bootstrap of additive model
-    mse.add <- mean(tapply(Y.add.boot, group, var)); y.add <- tapply(Y.add.boot, group, mean)
-    w.add <- diag(rep(nsub/mse.add,length(y.add)))
+    Y.add.boot <- bootstrap(Y.add, group, g) # second bootstrap of additive model
+    mse.add <- mean(tapply(Y.add.boot, group, var))
+
+    y.add <- tapply(Y.add.boot, group, mean)
+    y.add <- y.add[g]
+
+    w.add <- w
     m.add.boot <- mLR(data=y.add, weights=w.add, design=add.model, nstep=nstep) # fit additive model
     AB.emp.F <- append(AB.emp.F,m.add.boot$fit/AB.df) # store interaction empirical F under additive model
   }
@@ -149,19 +161,18 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
   vartable <- data.frame("Source"=c("A","B","A+B","A:B","Residuals"),"Df"=c(A.df,B.df,add.df,AB.df,resid.df),
                          "Sum Sq"=c(round(A.SS,rf),round(B.SS,rf),round(add.SS,rf),round(AB.SS,rf),round(resid.SS,rf)),
                          "Mean Sq"=c(round(A.msq,rf),round(B.msq,rf),round(add.msq,rf),round(AB.msq,rf),round(mse,rf)),
-                         "F value"=c(round(A.F,rf),round(B.F,rf),round(add.F,rf),round(AB.F,rf),""),
-                         "p value"=c(round(A.pvalue,rf+1),round(B.pvalue,rf+1),round(add.pvalue,rf+1),round(AB.pvalue,rf+1),""))
+                         "F value"=c(round(A.F,rf),round(B.F,rf),round(add.F,rf),round(AB.F,rf),NA),
+                         "p value"=c(round(A.pvalue,rf+1),round(B.pvalue,rf+1),round(add.pvalue,rf+1),round(AB.pvalue,rf+1),NA))
 
   return(vartable)
 
 }
 
-bootstrap <- function (data=NULL, group=NULL) {
+bootstrap <- function (data, group, g) {
   yb <- data
-  g = unique(group)
-  for (igroup in 1:length(g)){
-    j <- group==g[igroup]
-    yb[j]=sample(data[j],length(data[j]),replace=T)
+  for (gv in g){
+    j <- (group == gv)
+    yb[j] <- sample(data[j],length(data[j]),replace=T)
   }
   return(yb)
 }
