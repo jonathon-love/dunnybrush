@@ -31,11 +31,6 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
   if (length(components) > 2)
     abort('Only two-way models are supported at this time', class='ValueError')
 
-  for (name in components) {
-    factor <- data[[name]]
-    if ( ! is.factor(factor))
-      abort('Explanatory variables must be factors', class='ValueError')
-  }
 
   if ( ! is.numeric(dep))
     abort('Dependent variable must be numeric', class='ValueError')
@@ -58,10 +53,16 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
     colNo <- 2
     allValues <- integer()
     for (comp in components) {
-      value = 1
-      for (levelNo in 1:(nlevels(data[[comp]])-1)) {
-        value = value + design[rowNo, colNo] * levelNo
-        colNo = colNo + 1
+      column <- data[[comp]]
+      if (is.factor(column)) {
+        value <- 1
+        for (levelNo in 1:(nlevels(column)-1)) {
+          value <- value + design[rowNo, colNo] * levelNo
+          colNo <- colNo + 1
+        }
+      } else {
+        value <- design[rowNo, colNo]
+        colNo <- colNo + 1
       }
       allValues <- c(allValues, value)
     }
@@ -81,11 +82,11 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
   intercept.model <- design[,1]
 
   A <- data[[ components[1] ]]
-  A.levels <- nlevels(A)
+  A.levels <- max(nlevels(A), 2)  # a value of 2 is used for covariates ... it works out
   A.model <- design[,1:A.levels]
 
   B <- data[[ components[2] ]]
-  B.levels <- nlevels(B)
+  B.levels <- max(nlevels(B), 2)
   B.model <- design[,c(1,(A.levels+1):(A.levels+B.levels-1))]
 
   add.levels <- A.levels+B.levels
