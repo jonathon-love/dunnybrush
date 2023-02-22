@@ -158,7 +158,7 @@ monolm <- function(data, formula, nsample=1000, nstep=Inf) {
 
   # store results
   rf <- 3
-  vartable <- data.frame("Source"=c("A","B","A+B","A:B","Residuals"),"Df"=c(A.df,B.df,add.df,AB.df,resid.df),
+  vartable <- data.frame("Source"=c(components[1],components[2],paste(components, collapse="+"),paste(components, collapse=":"),"Residuals"),"Df"=c(A.df,B.df,add.df,AB.df,resid.df),
                          "Sum Sq"=c(round(A.SS,rf),round(B.SS,rf),round(add.SS,rf),round(AB.SS,rf),round(resid.SS,rf)),
                          "Mean Sq"=c(round(A.msq,rf),round(B.msq,rf),round(add.msq,rf),round(AB.msq,rf),round(mse,rf)),
                          "F value"=c(round(A.F,rf),round(B.F,rf),round(add.F,rf),round(AB.F,rf),NA),
